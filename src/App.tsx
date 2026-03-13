@@ -645,24 +645,26 @@ export default function App() {
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src="/favicon.svg" alt="LINK Logo" className="w-8 h-8" />
-            <h1 className="text-xl font-bold text-[#225b94] tracking-wide">LINK</h1>
+          <div className="flex items-center flex-shrink-0 mr-4">
+            <h1 className="text-sm sm:text-xl font-bold text-[#225b94] tracking-wide flex flex-col sm:flex-row sm:gap-1.5 leading-tight">
+              <span>LINK</span>
+              <span>project</span>
+            </h1>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3">
             <button 
               onClick={() => setIsProjectModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
             >
-              <Plus className="w-4 h-4" />
-              Новый проект
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Новый проект</span>
             </button>
             <button 
               onClick={() => setIsTaskModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-medium hover:bg-emerald-600 transition-colors shadow-sm"
+              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-emerald-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-emerald-600 transition-colors shadow-sm"
             >
-              <ListTodo className="w-4 h-4" />
-              Новая задача
+              <ListTodo className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span>Новая задача</span>
             </button>
           </div>
         </div>
