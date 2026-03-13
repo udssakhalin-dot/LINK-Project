@@ -565,8 +565,8 @@ async function loadTasks() {
       reminder: newTask.reminder,
       assignee: null,
       notified: false
-    };
-  
+    }
+      console.log("SAVE TASK")
     await supabase.from('tasks').insert([task])
     
     setTasks([...tasks, task]);
