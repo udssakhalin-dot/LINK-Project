@@ -18,43 +18,45 @@ import {
 } from 'lucide-react';
 import { format, addDays, startOfWeek, addWeeks, subWeeks, addMonths, subMonths, startOfMonth, endOfMonth, isSameMonth, isSameDay } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import { auth, db } from './firebase';
+import { signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import { collection, query, where, onSnapshot, doc, setDoc, deleteDoc, updateDoc, Timestamp, getDocFromServer } from 'firebase/firestore';
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: any;
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 // --- Initial Data ---
-const INITIAL_PROJECTS = [
-  {
-    id: '1',
-    title: 'Тестовый проект',
-    description: 'Описание тестового проекта',
-    status: 'Активный',
-    progress: 0,
-    taskCount: 2,
-    color: 'bg-blue-500'
-  },
-  {
-    id: '2',
-    title: 'ипп',
-    description: 'Нет описания',
-    status: 'Активный',
-    progress: 0,
-    taskCount: 0,
-    color: 'bg-blue-500'
-  }
-];
-
-const INITIAL_TASKS = [
-  {
-    id: '1',
-    projectId: '2',
-    projectName: 'ипп',
-    projectColor: 'bg-blue-500',
-    title: 'ипп',
-    priority: 'Высокий',
-    status: 'В процессе',
-    dueDate: new Date(),
-    assignee: null,
-    notified: false
-  }
-];
+const INITIAL_PROJECTS: any[] = [];
+const INITIAL_TASKS: any[] = [];
 
 const PROJECT_COLORS = [
   { name: 'Синий', value: 'bg-blue-500' },
@@ -415,9 +417,59 @@ const playNotificationSound = () => {
 };
 
 export default function App() {
-  const [projects, setProjects] = useState(INITIAL_PROJECTS);
-  const [tasks, setTasks] = useState(INITIAL_TASKS);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [projects, setProjects] = useState<any[]>(INITIAL_PROJECTS);
+  const [tasks, setTasks] = useState<any[]>(INITIAL_TASKS);
   const [toasts, setToasts] = useState<{id: string, message: string}[]>([]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsAuthReady(true);
+      
+      if (currentUser) {
+        getDocFromServer(doc(db, 'test', 'connection')).catch(error => {
+          if(error instanceof Error && error.message.includes('the client is offline')) {
+            console.error("Please check your Firebase configuration.");
+          }
+        });
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!isAuthReady || !user) {
+      setProjects([]);
+      setTasks([]);
+      return;
+    }
+
+    const qProjects = query(collection(db, 'projects'), where('userId', '==', user.uid));
+    const unsubProjects = onSnapshot(qProjects, (snapshot) => {
+      const projs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setProjects(projs);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'projects'));
+
+    const qTasks = query(collection(db, 'tasks'), where('userId', '==', user.uid));
+    const unsubTasks = onSnapshot(qTasks, (snapshot) => {
+      const tsks = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { 
+          id: doc.id, 
+          ...data, 
+          dueDate: data.dueDate?.toDate ? data.dueDate.toDate() : new Date(data.dueDate) 
+        };
+      });
+      setTasks(tsks);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'tasks'));
+
+    return () => {
+      unsubProjects();
+      unsubTasks();
+    };
+  }, [user, isAuthReady]);
 
   useEffect(() => {
     // Request permission on mount, but it might be blocked if not user-initiated
@@ -508,28 +560,32 @@ export default function App() {
   const [filterPriority, setFilterPriority] = useState('all');
 
   // Handlers
-  const handleAddProject = (e: React.FormEvent) => {
+  const handleAddProject = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProject.title.trim()) return;
+    if (!newProject.title.trim() || !user) return;
     
+    const projectId = Date.now().toString();
     const project = {
-      id: Date.now().toString(),
+      userId: user.uid,
       title: newProject.title,
       description: newProject.description || 'Нет описания',
       status: 'Активный',
-      progress: 0,
-      taskCount: 0,
-      color: newProject.color
+      color: newProject.color,
+      createdAt: Timestamp.now()
     };
     
-    setProjects([...projects, project]);
-    setNewProject({ title: '', description: '', color: 'bg-blue-500' });
-    setIsProjectModalOpen(false);
+    try {
+      await setDoc(doc(db, 'projects', projectId), project);
+      setNewProject({ title: '', description: '', color: 'bg-blue-500' });
+      setIsProjectModalOpen(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `projects/${projectId}`);
+    }
   };
 
-  const handleAddTask = (e: React.FormEvent) => {
+  const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTask.title.trim() || !newTask.projectId) return;
+    if (!newTask.title.trim() || !newTask.projectId || !user) return;
     
     const project = projects.find(p => p.id === newTask.projectId);
     if (!project) return;
@@ -538,37 +594,37 @@ export default function App() {
     const [hours, minutes] = newTask.dueTime.split(':').map(Number);
     const taskDate = new Date(year, month - 1, day, hours, minutes);
 
+    const taskId = Date.now().toString();
     const task = {
-      id: Date.now().toString(),
+      userId: user.uid,
       projectId: project.id,
       projectName: project.title,
       projectColor: project.color,
       title: newTask.title,
       priority: newTask.priority,
       status: newTask.status,
-      dueDate: taskDate,
+      dueDate: Timestamp.fromDate(taskDate),
       reminder: newTask.reminder,
-      assignee: null,
-      notified: false
+      assignee: user.displayName || 'Не назначен',
+      notified: false,
+      createdAt: Timestamp.now()
     };
     
-    setTasks([...tasks, task]);
-    
-    // Update project task count
-    setProjects(projects.map(p => 
-      p.id === project.id ? { ...p, taskCount: p.taskCount + 1 } : p
-    ));
-    
-    setNewTask({ 
-      title: '', 
-      projectId: '', 
-      priority: 'Средний', 
-      status: 'К выполнению',
-      dueDate: format(new Date(), 'yyyy-MM-dd'),
-      dueTime: '12:00',
-      reminder: 'Нет'
-    });
-    setIsTaskModalOpen(false);
+    try {
+      await setDoc(doc(db, 'tasks', taskId), task);
+      setNewTask({ 
+        title: '', 
+        projectId: '', 
+        priority: 'Средний', 
+        status: 'К выполнению',
+        dueDate: format(new Date(), 'yyyy-MM-dd'),
+        dueTime: '12:00',
+        reminder: 'Нет'
+      });
+      setIsTaskModalOpen(false);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `tasks/${taskId}`);
+    }
   };
 
   const handleAddTaskToProject = (projectId: string) => {
@@ -581,28 +637,37 @@ export default function App() {
     setIsTaskModalOpen(true);
   };
 
-  const handleDeleteProject = (id: string) => {
-    setProjects(projects.filter(p => p.id !== id));
-    setTasks(tasks.filter(t => t.projectId !== id));
-  };
-
-  const handleDeleteTask = (id: string) => {
-    const task = tasks.find(t => t.id === id);
-    if (task) {
-      setProjects(projects.map(p => 
-        p.id === task.projectId ? { ...p, taskCount: Math.max(0, p.taskCount - 1) } : p
-      ));
-    }
-    setTasks(tasks.filter(t => t.id !== id));
-  };
-
-  const handleToggleComplete = (id: string) => {
-    setTasks(tasks.map(t => {
-      if (t.id === id) {
-        return { ...t, status: t.status === 'Готово' ? 'К выполнению' : 'Готово' };
+  const handleDeleteProject = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'projects', id));
+      // Also delete associated tasks
+      const projectTasks = tasks.filter(t => t.projectId === id);
+      for (const task of projectTasks) {
+        await deleteDoc(doc(db, 'tasks', task.id));
       }
-      return t;
-    }));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `projects/${id}`);
+    }
+  };
+
+  const handleDeleteTask = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'tasks', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `tasks/${id}`);
+    }
+  };
+
+  const handleToggleComplete = async (id: string) => {
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    try {
+      await updateDoc(doc(db, 'tasks', id), {
+        status: task.status === 'Готово' ? 'К выполнению' : 'Готово'
+      });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `tasks/${id}`);
+    }
   };
 
   const handleCalendarDateClick = (date: Date) => {
@@ -640,6 +705,36 @@ export default function App() {
     color: getEventColor(task.projectColor)
   }));
 
+  if (!isAuthReady) {
+    return <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC]">Загрузка...</div>;
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-gray-100 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Folder className="w-8 h-8" />
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">LINK project</h1>
+          <p className="text-gray-500 mb-8">Войдите, чтобы управлять своими проектами и задачами</p>
+          <button
+            onClick={() => signInWithPopup(auth, new GoogleAuthProvider())}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-700 font-medium hover:bg-gray-50 transition-colors shadow-sm"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+            </svg>
+            Войти через Google
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans text-gray-900">
       {/* Header */}
@@ -651,21 +746,38 @@ export default function App() {
               <span>project</span>
             </h1>
           </div>
-          <div className="flex gap-2 sm:gap-3">
-            <button 
-              onClick={() => setIsProjectModalOpen(true)}
-              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
-            >
-              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span>Новый проект</span>
-            </button>
-            <button 
-              onClick={() => setIsTaskModalOpen(true)}
-              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-emerald-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-emerald-600 transition-colors shadow-sm"
-            >
-              <ListTodo className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span>Новая задача</span>
-            </button>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex gap-2 sm:gap-3">
+              <button 
+                onClick={() => setIsProjectModalOpen(true)}
+                className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Новый проект</span>
+              </button>
+              <button 
+                onClick={() => setIsTaskModalOpen(true)}
+                className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 bg-emerald-500 text-white rounded-lg text-xs sm:text-sm font-medium hover:bg-emerald-600 transition-colors shadow-sm"
+              >
+                <ListTodo className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span>Новая задача</span>
+              </button>
+            </div>
+            
+            <div className="flex items-center gap-2 pl-2 sm:pl-4 border-l border-gray-200">
+              <img 
+                src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName || 'User'}`} 
+                alt="Profile" 
+                className="w-8 h-8 rounded-full" 
+                referrerPolicy="no-referrer" 
+              />
+              <button 
+                onClick={() => signOut(auth)} 
+                className="text-sm text-gray-500 hover:text-gray-900 hidden sm:block"
+              >
+                Выйти
+              </button>
+            </div>
           </div>
         </div>
       </header>
