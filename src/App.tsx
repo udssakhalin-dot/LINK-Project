@@ -431,6 +431,7 @@ async function loadTasks() {
   if (data) {
     setTasks(data)
   }
+   }
 
   const [toasts, setToasts] = useState<{id: string, message: string}[]>([]);
 
