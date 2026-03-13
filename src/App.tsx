@@ -1,4 +1,3 @@
-import { supabase } from './supabaseClient'
 import React, { useState, useEffect } from 'react';
 import {
   Folder,
@@ -418,21 +417,6 @@ const playNotificationSound = () => {
 export default function App() {
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [tasks, setTasks] = useState(INITIAL_TASKS);
-  useEffect(() => {
-  loadTasks()
-}, [])
-
-async function loadTasks() {
-  const { data } = await supabase
-    .from('tasks')
-    .select('*')
-    .order('created_at', { ascending: false })
-
-  if (data) {
-    setTasks(data)
-  }
-   }
-
   const [toasts, setToasts] = useState<{id: string, message: string}[]>([]);
 
   useEffect(() => {
@@ -543,7 +527,7 @@ async function loadTasks() {
     setIsProjectModalOpen(false);
   };
 
-  const handleAddTask = async (e: React.FormEvent) => {
+  const handleAddTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.title.trim() || !newTask.projectId) return;
     
@@ -566,9 +550,7 @@ async function loadTasks() {
       reminder: newTask.reminder,
       assignee: null,
       notified: false
-    }
-      console.log("SAVE TASK")
-    await supabase.from('tasks').insert([task])
+    };
     
     setTasks([...tasks, task]);
     
@@ -717,7 +699,7 @@ async function loadTasks() {
         </div>
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div className="mb-8">
           {/* Projects Column */}
           <section>
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -725,9 +707,9 @@ async function loadTasks() {
                 <h2 className="text-lg font-bold text-gray-900">Проекты</h2>
                 <span className="text-sm text-gray-500">{projects.length} активных</span>
               </div>
-              <div className="p-5 flex flex-col gap-4 max-h-[600px] overflow-y-auto">
+              <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[800px] overflow-y-auto bg-gray-50/50">
                 {projects.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">Нет проектов. Создайте первый проект!</div>
+                  <div className="text-center py-8 text-gray-500 col-span-full">Нет проектов. Создайте первый проект!</div>
                 ) : (
                   projects.map(project => {
                     const projectTasks = tasks.filter(t => t.projectId === project.id);
@@ -748,61 +730,6 @@ async function loadTasks() {
                       />
                     );
                   })
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* Tasks Column */}
-          <section>
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="p-5 border-b border-gray-100 flex flex-wrap gap-3 items-center justify-between">
-                <div className="flex gap-3 flex-wrap flex-1">
-                  <select 
-                    value={filterProject}
-                    onChange={(e) => setFilterProject(e.target.value)}
-                    className="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2"
-                  >
-                    <option value="all">Все проекты</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.title}</option>
-                    ))}
-                  </select>
-                  <select 
-                    value={filterStatus}
-                    onChange={(e) => setFilterStatus(e.target.value)}
-                    className="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2"
-                  >
-                    <option value="all">Все статусы</option>
-                    <option value="К выполнению">К выполнению</option>
-                    <option value="В процессе">В процессе</option>
-                    <option value="Готово">Готово</option>
-                  </select>
-                  <select 
-                    value={filterPriority}
-                    onChange={(e) => setFilterPriority(e.target.value)}
-                    className="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2"
-                  >
-                    <option value="all">Все приоритеты</option>
-                    <option value="Высокий">Высокий</option>
-                    <option value="Средний">Средний</option>
-                    <option value="Низкий">Низкий</option>
-                  </select>
-                </div>
-                <button 
-                  onClick={() => setShowArchive(!showArchive)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${showArchive ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-500 text-white hover:bg-gray-600'}`}
-                >
-                  {showArchive ? 'Скрыть архив' : 'Показать архив'}
-                </button>
-              </div>
-              <div className="p-5 flex flex-col gap-4 max-h-[600px] overflow-y-auto">
-                {filteredTasks.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">Задач не найдено.</div>
-                ) : (
-                  filteredTasks.map(task => (
-                    <TaskCard key={task.id} task={task} onDelete={handleDeleteTask} onToggleComplete={handleToggleComplete} />
-                  ))
                 )}
               </div>
             </div>
@@ -1002,8 +929,6 @@ async function loadTasks() {
           </div>
         ))}
       </div>
-      </div>
+    </div>
   );
 }
-  
-
