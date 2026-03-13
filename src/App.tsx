@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Folder,
   ListTodo,
@@ -11,7 +11,10 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
-  X
+  ChevronDown,
+  ChevronUp,
+  X,
+  Bell
 } from 'lucide-react';
 import { format, addDays, startOfWeek, addWeeks, subWeeks, addMonths, subMonths, startOfMonth, endOfMonth, isSameMonth, isSameDay } from 'date-fns';
 import { ru } from 'date-fns/locale';
@@ -48,7 +51,8 @@ const INITIAL_TASKS = [
     priority: 'Высокий',
     status: 'В процессе',
     dueDate: new Date(),
-    assignee: null
+    assignee: null,
+    notified: false
   }
 ];
 
@@ -84,56 +88,97 @@ const getEventColor = (bgClass: string) => {
 // --- Components ---
 
 const StatCard = ({ icon: Icon, title, value, iconBg, iconColor }: any) => (
-  <div className="bg-white rounded-xl border border-gray-100 p-5 flex items-center gap-4 shadow-sm">
-    <div className={`p-3 rounded-lg ${iconBg}`}>
-      <Icon className={`w-6 h-6 ${iconColor}`} />
+  <div className="bg-white rounded-xl border border-gray-100 p-3 sm:p-4 flex items-center gap-3 shadow-sm">
+    <div className={`p-2 sm:p-2.5 rounded-lg ${iconBg}`}>
+      <Icon className={`w-5 h-5 ${iconColor}`} />
     </div>
     <div>
-      <p className="text-sm text-gray-500 font-medium">{title}</p>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
+      <p className="text-xs sm:text-sm text-gray-500 font-medium leading-tight">{title}</p>
+      <p className="text-lg sm:text-xl font-bold text-gray-900 leading-tight">{value}</p>
     </div>
   </div>
 );
 
-const ProjectCard = ({ project, onDelete }: any) => (
-  <div className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow">
-    <div className="flex justify-between items-start mb-2">
-      <div className="flex items-center gap-2">
-        <div className={`w-2.5 h-2.5 rounded-full ${project.color}`} />
-        <h3 className="font-semibold text-gray-900">{project.title}</h3>
+const ProjectCard = ({ project, tasks, onDelete, onAddTask, onToggleComplete, onDeleteTask }: any) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div 
+      className="bg-white border border-gray-100 rounded-xl p-5 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+      onClick={() => setIsExpanded(!isExpanded)}
+    >
+      <div className="flex justify-between items-start mb-2">
+        <div className="flex items-center gap-2">
+          <div className={`w-2.5 h-2.5 rounded-full ${project.color}`} />
+          <h3 className="font-semibold text-gray-900">{project.title}</h3>
+        </div>
+        <span className="px-2.5 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-md">
+          {project.status}
+        </span>
       </div>
-      <span className="px-2.5 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-md">
-        {project.status}
-      </span>
-    </div>
-    <p className="text-sm text-gray-500 mb-4">{project.description}</p>
-    
-    <div className="mb-4">
-      <div className="flex justify-between text-xs text-gray-500 mb-1">
-        <span>Прогресс</span>
-        <span>{project.progress}%</span>
+      <p className="text-sm text-gray-500 mb-4">{project.description}</p>
+      
+      <div className="mb-4">
+        <div className="flex justify-between text-xs text-gray-500 mb-1">
+          <span>Прогресс</span>
+          <span>{project.progress}%</span>
+        </div>
+        <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+          <div 
+            className="bg-blue-500 h-1.5 rounded-full transition-all duration-500 ease-out" 
+            style={{ width: `${project.progress}%` }}
+          />
+        </div>
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+      
+      <div className="flex justify-between items-center pt-2 border-t border-gray-50">
+        <div className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 transition-colors">
+          <span>{project.taskCount} задач</span>
+          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </div>
+        <div className="flex gap-2">
+          <button 
+            onClick={(e) => { e.stopPropagation(); onAddTask(project.id); }} 
+            className="p-1 text-emerald-600 hover:bg-emerald-50 rounded" 
+            title="Добавить задачу"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={(e) => e.stopPropagation()} 
+            className="p-1 text-blue-600 hover:bg-blue-50 rounded" 
+            title="Редактировать"
+          >
+            <Edit2 className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={(e) => { e.stopPropagation(); onDelete(project.id); }} 
+            className="p-1 text-red-500 hover:bg-red-50 rounded" 
+            title="Удалить"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {isExpanded && tasks && tasks.length > 0 && (
         <div 
-          className="bg-blue-500 h-1.5 rounded-full transition-all duration-500 ease-out" 
-          style={{ width: `${project.progress}%` }}
-        />
-      </div>
+          className="mt-4 pt-4 border-t border-gray-100 flex flex-col gap-3 cursor-default"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {tasks.map((task: any) => (
+            <TaskCard 
+              key={task.id} 
+              task={task} 
+              onDelete={onDeleteTask} 
+              onToggleComplete={onToggleComplete} 
+            />
+          ))}
+        </div>
+      )}
     </div>
-    
-    <div className="flex justify-between items-center pt-2 border-t border-gray-50">
-      <span className="text-sm text-gray-500">{project.taskCount} задач</span>
-      <div className="flex gap-2">
-        <button className="p-1 text-blue-600 hover:bg-blue-50 rounded" title="Редактировать">
-          <Edit2 className="w-4 h-4" />
-        </button>
-        <button onClick={() => onDelete(project.id)} className="p-1 text-red-500 hover:bg-red-50 rounded" title="Удалить">
-          <Trash2 className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 const TaskCard = ({ task, onDelete, onToggleComplete }: any) => {
   const priorityColors: Record<string, string> = {
@@ -276,8 +321,8 @@ const Calendar = ({ events, onAddEvent }: { events: any[], onAddEvent: (date: Da
       
       <div className="grid grid-cols-7 border-b border-gray-100">
         {['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].map((day, i) => (
-          <div key={i} className="p-3 text-center border-r last:border-r-0 border-gray-100">
-            <div className="text-sm font-medium text-gray-500">{day}</div>
+          <div key={i} className="p-2 sm:p-3 text-center border-r last:border-r-0 border-gray-100">
+            <div className="text-[10px] sm:text-sm font-medium text-gray-500">{day}</div>
           </div>
         ))}
       </div>
@@ -291,20 +336,20 @@ const Calendar = ({ events, onAddEvent }: { events: any[], onAddEvent: (date: Da
             <div 
               key={i} 
               onClick={() => onAddEvent(day)}
-              className={`p-2 border-r border-b last:border-r-0 border-gray-100 min-h-[100px] cursor-pointer hover:bg-blue-50/50 transition-colors group ${!isCurrentMonth && view === 'Месяц' ? 'bg-gray-50/50' : ''}`}
+              className={`p-1 sm:p-2 border-r border-b last:border-r-0 border-gray-100 min-h-[80px] sm:min-h-[100px] cursor-pointer hover:bg-blue-50/50 transition-colors group ${!isCurrentMonth && view === 'Месяц' ? 'bg-gray-50/50' : ''}`}
             >
-              <div className="flex justify-between items-start mb-2">
-                <div className={`text-sm ${!isCurrentMonth && view === 'Месяц' ? 'text-gray-400' : 'text-gray-900'}`}>
+              <div className="flex justify-between items-start mb-1 sm:mb-2">
+                <div className={`text-[10px] sm:text-sm leading-tight ${!isCurrentMonth && view === 'Месяц' ? 'text-gray-400' : 'text-gray-900'}`}>
                   {format(day, 'd MMM', { locale: ru })}
                 </div>
-                <button className="opacity-0 group-hover:opacity-100 p-0.5 text-blue-600 hover:bg-blue-100 rounded transition-opacity" title="Добавить задачу">
+                <button className="opacity-0 group-hover:opacity-100 p-0.5 text-blue-600 hover:bg-blue-100 rounded transition-opacity hidden sm:block" title="Добавить задачу">
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
               {dayEvents.map(event => (
                 <div 
                   key={event.id} 
-                  className={`text-xs px-2 py-1.5 rounded mb-1 truncate ${event.color}`}
+                  className={`text-[9px] sm:text-xs px-1 sm:px-2 py-0.5 sm:py-1.5 rounded mb-1 truncate leading-tight ${event.color}`}
                   title={event.title}
                 >
                   {event.title}
@@ -337,9 +382,108 @@ const Modal = ({ isOpen, onClose, title, children }: any) => {
   );
 };
 
+const playNotificationSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    
+    const audioCtx = new AudioContext();
+    
+    const playBeep = (time: number) => {
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, time);
+      osc.frequency.exponentialRampToValueAtTime(440, time + 0.1);
+      
+      gainNode.gain.setValueAtTime(0.1, time);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
+      
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      
+      osc.start(time);
+      osc.stop(time + 0.1);
+    };
+
+    playBeep(audioCtx.currentTime);
+    playBeep(audioCtx.currentTime + 0.15);
+  } catch (e) {
+    console.error('Audio playback failed', e);
+  }
+};
+
 export default function App() {
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [tasks, setTasks] = useState(INITIAL_TASKS);
+  const [toasts, setToasts] = useState<{id: string, message: string}[]>([]);
+
+  useEffect(() => {
+    // Request permission on mount, but it might be blocked if not user-initiated
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().catch(console.error);
+    }
+
+    const checkReminders = () => {
+      const now = new Date().getTime();
+      let hasUpdates = false;
+      
+      setTasks(currentTasks => {
+        const updatedTasks = currentTasks.map(task => {
+          if (task.status === 'Выполнено' || task.status === 'Готово' || task.notified || !task.reminder || task.reminder === 'Нет') {
+            return task;
+          }
+
+          const due = new Date(task.dueDate).getTime();
+          let reminderTime = due;
+
+          switch (task.reminder) {
+            case 'В момент выполнения': reminderTime = due; break;
+            case 'За 30 минут': reminderTime = due - 30 * 60 * 1000; break;
+            case 'За час': reminderTime = due - 60 * 60 * 1000; break;
+            case 'За 2 часа': reminderTime = due - 2 * 60 * 60 * 1000; break;
+            case 'За 1 день': reminderTime = due - 24 * 60 * 60 * 1000; break;
+            case 'За 2 дня': reminderTime = due - 2 * 24 * 60 * 60 * 1000; break;
+            case 'За неделю': reminderTime = due - 7 * 24 * 60 * 60 * 1000; break;
+          }
+
+          if (now >= reminderTime && now - reminderTime < 5 * 60 * 1000) {
+            // Try system notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+              try {
+                new Notification('Напоминание о задаче', {
+                  body: `Задача "${task.title}" требует вашего внимания.`,
+                });
+              } catch (e) {
+                console.error('System notification failed', e);
+              }
+            }
+            
+            // Always show in-app toast
+            setToasts(prev => [...prev, { id: Date.now().toString(), message: `Напоминание: ${task.title}` }]);
+            
+            // Auto-remove toast after 5 seconds
+            setTimeout(() => {
+              setToasts(prev => prev.slice(1));
+            }, 5000);
+
+            playNotificationSound();
+            hasUpdates = true;
+            return { ...task, notified: true };
+          }
+          return task;
+        });
+
+        return hasUpdates ? updatedTasks : currentTasks;
+      });
+    };
+
+    const interval = setInterval(checkReminders, 10000); // Check more frequently (every 10s)
+    checkReminders();
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Modal states
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
@@ -404,7 +548,8 @@ export default function App() {
       status: newTask.status,
       dueDate: taskDate,
       reminder: newTask.reminder,
-      assignee: null
+      assignee: null,
+      notified: false
     };
     
     setTasks([...tasks, task]);
@@ -424,6 +569,16 @@ export default function App() {
       reminder: 'Нет'
     });
     setIsTaskModalOpen(false);
+  };
+
+  const handleAddTaskToProject = (projectId: string) => {
+    setNewTask(prev => ({
+      ...prev,
+      projectId: projectId,
+      dueDate: format(new Date(), 'yyyy-MM-dd'),
+      dueTime: '12:00',
+    }));
+    setIsTaskModalOpen(true);
   };
 
   const handleDeleteProject = (id: string) => {
@@ -512,7 +667,7 @@ export default function App() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Stats Row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 md:gap-6 mb-8">
           <StatCard 
             icon={Folder} 
             title="Всего проектов" 
@@ -567,7 +722,11 @@ export default function App() {
                       <ProjectCard 
                         key={project.id} 
                         project={{...project, progress, taskCount: projectTasks.length}} 
-                        onDelete={handleDeleteProject} 
+                        tasks={projectTasks}
+                        onDelete={handleDeleteProject}
+                        onAddTask={handleAddTaskToProject}
+                        onToggleComplete={handleToggleComplete}
+                        onDeleteTask={handleDeleteTask}
                       />
                     );
                   })
@@ -777,6 +936,7 @@ export default function App() {
               className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value="Нет">Нет</option>
+              <option value="В момент выполнения">В момент выполнения</option>
               <option value="За неделю">За неделю</option>
               <option value="За 2 дня">За 2 дня</option>
               <option value="За 1 день">За 1 день</option>
@@ -803,6 +963,27 @@ export default function App() {
           </div>
         </form>
       </Modal>
+
+      {/* Toast Notifications */}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+        {toasts.map(toast => (
+          <div 
+            key={toast.id} 
+            className="bg-white border border-gray-200 shadow-lg rounded-lg p-4 flex items-center gap-3 animate-in slide-in-from-bottom-5 fade-in duration-300"
+          >
+            <div className="bg-blue-100 text-blue-600 p-2 rounded-full">
+              <Bell size={20} />
+            </div>
+            <p className="text-sm font-medium text-gray-800">{toast.message}</p>
+            <button 
+              onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+              className="ml-4 text-gray-400 hover:text-gray-600"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
