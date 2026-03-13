@@ -1002,8 +1002,6 @@ async function loadTasks() {
           </div>
         ))}
       </div>
-    </div>
-    </div>
   );
 }
   
