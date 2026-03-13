@@ -1,3 +1,4 @@
+import { supabase } from './supabaseClient'
 import React, { useState, useEffect } from 'react';
 import {
   Folder,
@@ -417,6 +418,20 @@ const playNotificationSound = () => {
 export default function App() {
   const [projects, setProjects] = useState(INITIAL_PROJECTS);
   const [tasks, setTasks] = useState(INITIAL_TASKS);
+  useEffect(() => {
+  loadTasks()
+}, [])
+
+async function loadTasks() {
+  const { data } = await supabase
+    .from('tasks')
+    .select('*')
+    .order('created_at', { ascending: false })
+
+  if (data) {
+    setTasks(data)
+  }
+
   const [toasts, setToasts] = useState<{id: string, message: string}[]>([]);
 
   useEffect(() => {
@@ -527,7 +542,7 @@ export default function App() {
     setIsProjectModalOpen(false);
   };
 
-  const handleAddTask = (e: React.FormEvent) => {
+  const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTask.title.trim() || !newTask.projectId) return;
     
@@ -551,6 +566,8 @@ export default function App() {
       assignee: null,
       notified: false
     };
+    
+    await supabase.from('tasks').insert([task])
     
     setTasks([...tasks, task]);
     
