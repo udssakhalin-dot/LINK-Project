@@ -566,7 +566,7 @@ async function loadTasks() {
       assignee: null,
       notified: false
     };
-    
+  
     await supabase.from('tasks').insert([task])
     
     setTasks([...tasks, task]);
