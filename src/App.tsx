@@ -257,7 +257,7 @@ const TaskCard = ({ task, onDelete, onEdit, onToggleComplete }: any) => {
   );
 };
 
-const Calendar = ({ events, onAddEvent }: { events: any[], onAddEvent: (date: Date) => void }) => {
+const Calendar = ({ events, onAddEvent, onDayClick, selectedDay }: { events: any[], onAddEvent: (date: Date) => void, onDayClick: (date: Date) => void, selectedDay: Date | null }) => {
   const [currentDate, setCurrentDate] = useState(new Date(2026, 2, 12));
   const [view, setView] = useState<'Неделя' | 'Месяц'>('Неделя');
 
@@ -333,18 +333,24 @@ const Calendar = ({ events, onAddEvent }: { events: any[], onAddEvent: (date: Da
           const dayEvents = events.filter(e => isSameDay(e.date, day));
           const isCurrentMonth = isSameMonth(day, currentDate);
           
+          const isSelected = selectedDay && isSameDay(day, selectedDay);
+          
           return (
             <div 
               key={i} 
-              onClick={() => onAddEvent(day)}
-              className={`p-1 sm:p-2 border-r border-b last:border-r-0 border-gray-100 min-h-[80px] sm:min-h-[100px] cursor-pointer hover:bg-blue-50/50 transition-colors group ${!isCurrentMonth && view === 'Месяц' ? 'bg-gray-50/50' : ''}`}
+              onClick={() => onDayClick(day)}
+              className={`p-1 sm:p-2 border-r border-b last:border-r-0 border-gray-100 min-h-[80px] sm:min-h-[100px] cursor-pointer hover:bg-blue-50/50 transition-colors group ${!isCurrentMonth && view === 'Месяц' ? 'bg-gray-50/50' : ''} ${isSelected ? 'ring-2 ring-inset ring-blue-500 bg-blue-50/50' : ''}`}
             >
               <div className="flex justify-between items-start mb-1 sm:mb-2">
-                <div className={`text-[10px] sm:text-sm leading-tight ${!isCurrentMonth && view === 'Месяц' ? 'text-gray-400' : 'text-gray-900'}`}>
+                <div className={`text-[10px] sm:text-sm leading-tight ${!isCurrentMonth && view === 'Месяц' ? 'text-gray-400' : isSelected ? 'text-blue-700 font-bold' : 'text-gray-900'}`}>
                   {format(day, 'd MMM', { locale: ru })}
                 </div>
-                <button className="opacity-0 group-hover:opacity-100 p-0.5 text-blue-600 hover:bg-blue-100 rounded transition-opacity hidden sm:block" title="Добавить задачу">
-                  <Plus className="w-3.5 h-3.5" />
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onAddEvent(day); }}
+                  className={`p-0.5 text-blue-600 hover:bg-blue-100 rounded transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} 
+                  title="Добавить задачу"
+                >
+                  <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                 </button>
               </div>
               {dayEvents.map(event => (
@@ -509,6 +515,7 @@ export default function App() {
   const [filterProject, setFilterProject] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<Date | null>(null);
 
   // Handlers
   const closeProjectModal = () => {
@@ -807,7 +814,63 @@ export default function App() {
 
         {/* Calendar Section */}
         <section>
-          <Calendar events={calendarEvents} onAddEvent={handleCalendarDateClick} />
+          <Calendar 
+            events={calendarEvents} 
+            onAddEvent={handleCalendarDateClick}
+            onDayClick={(day) => setSelectedCalendarDay(prev => prev && isSameDay(prev, day) ? null : day)}
+            selectedDay={selectedCalendarDay}
+          />
+          
+          {selectedCalendarDay && (
+            <div className="mt-4 bg-white rounded-xl border border-gray-100 shadow-sm p-5 animate-in slide-in-from-top-2 fade-in duration-200">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-base sm:text-lg font-bold text-gray-900">
+                  Задачи на {format(selectedCalendarDay, 'd MMMM yyyy', { locale: ru })}
+                </h3>
+                <div className="flex items-center gap-1 sm:gap-2">
+                  <button 
+                    onClick={() => handleCalendarDateClick(selectedCalendarDay)}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 px-2 py-1 rounded-md hover:bg-blue-50 transition-colors"
+                    title="Добавить задачу"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span className="hidden sm:inline">Добавить</span>
+                  </button>
+                  <button 
+                    onClick={() => setSelectedCalendarDay(null)}
+                    className="text-sm text-gray-500 hover:text-gray-700 font-medium flex items-center gap-1 px-2 py-1 rounded-md hover:bg-gray-100 transition-colors"
+                    title="Свернуть день"
+                  >
+                    <ChevronUp className="w-4 h-4" />
+                    <span className="hidden sm:inline">Свернуть</span>
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {tasks.filter(t => isSameDay(t.dueDate, selectedCalendarDay)).length > 0 ? (
+                  tasks.filter(t => isSameDay(t.dueDate, selectedCalendarDay)).map(task => (
+                    <TaskCard 
+                      key={task.id} 
+                      task={task} 
+                      onDelete={handleDeleteTask} 
+                      onEdit={handleEditTask}
+                      onToggleComplete={handleToggleComplete} 
+                    />
+                  ))
+                ) : (
+                  <div className="col-span-full py-8 text-center text-gray-500 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                    Нет задач на этот день.
+                    <button 
+                      onClick={() => handleCalendarDateClick(selectedCalendarDay)}
+                      className="ml-2 text-blue-600 hover:text-blue-700 font-medium"
+                    >
+                      Добавить задачу
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       </main>
 
